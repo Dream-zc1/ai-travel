@@ -1,6 +1,7 @@
 import { Hero } from "@/components/hero";
 import { Experiences } from "@/components/experiences";
 import { Planner } from "@/components/planner";
+import { MyGlobe } from "@/components/globe";
 import { CTA } from "@/components/cta";
 import { Footer } from "@/components/footer";
 import { PlannerProvider } from "@/components/planner/planner-context";
@@ -22,6 +23,9 @@ export default function Home() {
       <SectionDivider />
       <Experiences />
       <Planner />
+      <SectionDivider />
+      <MyGlobe />
+      <SectionDivider />
       <CTA />
       <Footer />
     </PlannerProvider>

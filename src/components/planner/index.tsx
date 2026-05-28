@@ -1,10 +1,16 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { WandSparkles, ArrowDown } from "lucide-react";
+import { WandSparkles, ArrowDown, LockKeyhole, LogIn } from "lucide-react";
+import { useSession } from "next-auth/react";
+import Link from "next/link";
 import { OutputPanel } from "./output-panel";
+import { Button } from "@/components/ui/button";
 
 export function Planner() {
+  const { data: session, status } = useSession();
+  const isAuthenticated = status === "authenticated";
+
   return (
     <>
       {/* Bridge section — connects inspiration to AI generation */}
@@ -54,7 +60,33 @@ export function Planner() {
 
           {/* Output */}
           <div className="mt-12 min-h-[60vh]">
-            <OutputPanel />
+            {isAuthenticated ? (
+              <OutputPanel />
+            ) : (
+              <motion.div
+                initial={{ opacity: 0, y: 24 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true }}
+                transition={{ duration: 0.6, ease: [0.25, 0.1, 0, 1] }}
+                className="flex flex-col items-center justify-center rounded-2xl border border-border/40 bg-gradient-to-b from-background via-primary/[0.02] to-background px-6 py-20 text-center"
+              >
+                <div className="mb-6 flex size-16 items-center justify-center rounded-2xl border border-border/40 bg-primary/5">
+                  <LockKeyhole className="size-7 text-primary/60" />
+                </div>
+                <h3 className="text-2xl font-bold tracking-tight">
+                  登录后使用完整功能
+                </h3>
+                <p className="mt-2 max-w-sm text-balance text-sm text-muted-foreground">
+                  登录即可使用 AI 行程规划器，生成专属你的旅行路线。
+                </p>
+                <Link href="/login">
+                  <Button className="mt-8 h-11 rounded-full px-6 text-sm font-medium">
+                    <LogIn className="mr-1.5 size-4" />
+                    立即登录
+                  </Button>
+                </Link>
+              </motion.div>
+            )}
           </div>
         </div>
       </section>

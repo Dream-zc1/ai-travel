@@ -21,11 +21,9 @@ export default async function RegisterPage() {
   return (
     <div className="flex min-h-[60vh] flex-col items-center justify-center px-4">
       <div className="w-full max-w-sm">
-        <h1 className="mb-2 text-2xl font-bold tracking-tight">
-          Create account
-        </h1>
+        <h1 className="mb-2 text-2xl font-bold tracking-tight">创建账户</h1>
         <p className="mb-8 text-sm text-muted-foreground">
-          Sign up to start planning your trips.
+          验证邮箱后即可开始规划你的旅程。
         </p>
         <RegisterForm />
       </div>

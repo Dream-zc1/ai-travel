@@ -9,6 +9,7 @@ export const siteConfig = {
   mainNav: [
     { title: "游客返图", href: "#reviews" },
     { title: "AI行程", href: "#planner-section" },
+    { title: "我的足迹", href: "#globe-section" },
   ],
 } as const;
 

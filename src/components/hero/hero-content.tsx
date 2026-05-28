@@ -37,7 +37,7 @@ export function HeroContent() {
       {/* Headline */}
       <motion.h1
         {...bounceIn(0.2)}
-        className="text-balance text-5xl font-bold leading-[1.1] tracking-tight sm:text-6xl md:text-7xl lg:text-8xl"
+        className="text-balance text-5xl font-bold leading-[1.1] tracking-tight text-white dark:text-foreground sm:text-6xl md:text-7xl lg:text-8xl"
       >
         Your next adventure,
         <br />
@@ -49,7 +49,7 @@ export function HeroContent() {
       {/* Subtitle */}
       <motion.p
         {...fadeUp(0.3)}
-        className="mt-6 max-w-2xl text-balance text-base text-muted-foreground sm:text-lg"
+        className="mt-6 max-w-2xl text-balance text-base text-white/80 dark:text-muted-foreground sm:text-lg"
       >
         Tell us where you dream of going, and let AI craft the perfect
         itinerary — from hidden gems to local favorites, all in seconds.

@@ -30,9 +30,9 @@ export function ExperienceCard({ experience }: ExperienceCardProps) {
       </div>
 
       {/* Gradient overlays */}
-      <div className="absolute inset-0 bg-gradient-to-t from-background/95 via-background/50 to-transparent" />
-      <div className="absolute inset-0 bg-gradient-to-r from-background/20 via-transparent to-background/10" />
-      <div className="absolute inset-0 transition-colors duration-500 group-hover:bg-background/10" />
+      <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/40 to-transparent dark:from-background/95 dark:via-background/50" />
+      <div className="absolute inset-0 bg-gradient-to-r from-black/30 via-transparent to-black/10 dark:from-background/20 dark:via-transparent dark:to-background/10" />
+      <div className="absolute inset-0 transition-colors duration-500 group-hover:bg-black/20 dark:group-hover:bg-background/10" />
 
       {/* Destination badge — top left */}
       <div className="absolute left-5 top-5 sm:left-7 sm:top-7">

@@ -38,26 +38,53 @@ export const authOptions: NextAuthOptions = {
           id: String(user.id),
           email: user.email,
           name: user.name,
+          role: user.role,
+          // avatar intentionally excluded — too large for JWT cookie
+          bio: user.bio,
+          region: user.region,
+          location: user.location,
         };
       },
     }),
   ],
   session: {
     strategy: "jwt",
+    maxAge: 30 * 24 * 60 * 60, // 30 days
   },
   pages: {
     signIn: "/login",
   },
   callbacks: {
-    async jwt({ token, user }) {
+    async jwt({ token, user, trigger, session: updateData }) {
       if (user) {
         token.id = user.id;
+        token.role = user.role;
+        token.avatar = user.avatar;
+        token.bio = user.bio;
+        token.region = user.region;
+        token.location = user.location;
       }
+
+      // Token updated via session.update(data) — data arrives as `session` param
+      if (trigger === "update" && updateData) {
+        if (updateData.name !== undefined) token.name = updateData.name;
+        if (updateData.avatar !== undefined) token.avatar = updateData.avatar;
+        if (updateData.bio !== undefined) token.bio = updateData.bio;
+        if (updateData.region !== undefined) token.region = updateData.region;
+        if (updateData.location !== undefined) token.location = updateData.location;
+      }
+
       return token;
     },
     async session({ session, token }) {
       if (session.user) {
         session.user.id = token.id as string;
+        session.user.role = token.role as string;
+        session.user.name = token.name as string | null;
+        session.user.avatar = token.avatar as string | null;
+        session.user.bio = token.bio as string | null;
+        session.user.region = token.region as string | null;
+        session.user.location = token.location as string | null;
       }
       return session;
     },

@@ -1,8 +1,10 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { Sparkles, ArrowRight, Loader2 } from "lucide-react";
+import { Sparkles, ArrowRight, Loader2, LogIn } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useSession } from "next-auth/react";
+import Link from "next/link";
 import { usePlannerContext } from "@/components/planner/planner-context";
 
 export function PromptInput() {
@@ -11,6 +13,8 @@ export function PromptInput() {
   const { append, isLoading } = usePlannerContext();
   const inputRef = useRef<HTMLInputElement>(null);
   const hasClicked = useRef(false);
+  const { data: session, status } = useSession();
+  const isAuthenticated = status === "authenticated";
 
   // Scroll to planner section when loading starts
   useEffect(() => {
@@ -32,7 +36,7 @@ export function PromptInput() {
     append({ role: "user", content: text });
   };
 
-  return (
+  return isAuthenticated ? (
     <div
       className={cn(
         "group relative mx-auto flex w-full max-w-xl items-center gap-2 rounded-2xl border px-4 py-3 transition-all duration-300",
@@ -89,5 +93,22 @@ export function PromptInput() {
         )}
       </button>
     </div>
+  ) : (
+    <Link
+      href="/login"
+      className={cn(
+        "group relative mx-auto flex w-full max-w-xl items-center gap-2 rounded-2xl border px-4 py-3 transition-all duration-300",
+        "bg-background/60 backdrop-blur-xl",
+        "border-border/50 hover:border-primary/40 hover:shadow-[0_0_30px_-8px_hsl(var(--primary))]",
+      )}
+    >
+      <Sparkles className="size-5 shrink-0 text-muted-foreground transition-colors group-hover:text-primary" />
+      <span className="flex-1 text-left text-base text-muted-foreground/60">
+        登录后使用 AI 规划行程
+      </span>
+      <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg shadow-primary/30">
+        <LogIn className="size-4" />
+      </span>
+    </Link>
   );
 }

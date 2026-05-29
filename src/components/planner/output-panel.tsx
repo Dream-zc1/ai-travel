@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef } from "react";
+import { useRef, useEffect } from "react";
 import { motion } from "framer-motion";
 import { AlertCircle, RefreshCw, Sparkles } from "lucide-react";
 import { usePlannerContext } from "./planner-context";
@@ -13,9 +13,11 @@ export function OutputPanel() {
   const hasGeneratedRef = useRef(false);
 
   // Once generation starts, never show the idle sample plan again
-  if (isLoading || itinerary || error) {
-    hasGeneratedRef.current = true;
-  }
+  useEffect(() => {
+    if (isLoading || itinerary || error) {
+      hasGeneratedRef.current = true;
+    }
+  }, [isLoading, itinerary, error]);
 
   const isStreaming = isLoading && !!itinerary;
   const isLoadingFirst = isLoading && !itinerary;

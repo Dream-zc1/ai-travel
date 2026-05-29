@@ -1,8 +1,9 @@
-import { streamText } from "ai";
+import { streamObject } from "ai";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { deepseek } from "@/lib/ai/provider";
 import { SYSTEM_PROMPT } from "@/lib/ai/prompts/system-prompt";
+import { itinerarySchema } from "@/lib/ai/schema";
 
 export async function POST(req: Request) {
   const session = await getServerSession(authOptions);
@@ -18,10 +19,11 @@ export async function POST(req: Request) {
       messages[messages.length - 1]?.content ??
       "";
 
-    const result = streamText({
+    const result = streamObject({
       model: deepseek.chat("deepseek-chat"),
       system: SYSTEM_PROMPT,
       prompt: latestMessage,
+      schema: itinerarySchema,
     });
 
     return result.toTextStreamResponse();

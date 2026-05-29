@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { motion } from "framer-motion";
-import { Globe2, Plus, LockKeyhole, LogIn, MapPin } from "lucide-react";
+import { Globe2, Plus, LockKeyhole, LogIn, MapPin, Share2, MessageCircle } from "lucide-react";
 import { useSession } from "next-auth/react";
 import Link from "next/link";
 import dynamic from "next/dynamic";
@@ -24,6 +24,9 @@ import { PlaceDetail } from "./place-detail";
 import { AddPlaceDialog } from "./add-place-dialog";
 import { ChinaMapDetail } from "./china-map-detail";
 import { Button } from "@/components/ui/button";
+import { computeStats, type TravelStats } from "@/lib/travel-stats";
+import { SharePoster } from "@/components/share/share-poster";
+import { Timeline } from "./timeline";
 
 interface Place {
   id: number;
@@ -43,14 +46,47 @@ export function MyGlobe() {
   const [dialogLat, setDialogLat] = useState<number | undefined>();
   const [dialogLng, setDialogLng] = useState<number | undefined>();
   const [showChinaMap, setShowChinaMap] = useState(false);
+  const [globeVisible, setGlobeVisible] = useState(false);
+  const [stats, setStats] = useState<TravelStats>({ cityCount: 0, countryCount: 0, totalKm: 0 });
+  const [showShare, setShowShare] = useState(false);
+  const [showTimeline, setShowTimeline] = useState(false);
+  const [globeCanvas, setGlobeCanvas] = useState<HTMLCanvasElement | null>(null);
+  const sectionRef = useRef<HTMLDivElement>(null);
+
+  // IntersectionObserver — only load Three.js when section scrolls into view
+  useEffect(() => {
+    const el = sectionRef.current;
+    if (!el) return;
+    const obs = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          setGlobeVisible(true);
+          obs.disconnect();
+        }
+      },
+      { rootMargin: "200px" },
+    );
+    obs.observe(el);
+    return () => obs.disconnect();
+  }, []);
 
   const fetchPlaces = useCallback(async () => {
     if (!isAuthenticated) return;
-    const res = await fetch("/api/places");
-    if (res.ok) {
-      const data = await res.json();
+    const [placesRes, checkinsRes] = await Promise.all([
+      fetch("/api/places"),
+      fetch("/api/checkins/my"),
+    ]);
+    let all: { lat: number; lng: number }[] = [];
+    if (placesRes.ok) {
+      const data = await placesRes.json();
       setPlaces(data);
+      all = data;
     }
+    if (checkinsRes.ok) {
+      const data = await checkinsRes.json();
+      all = [...all, ...data];
+    }
+    setStats(computeStats(all));
   }, [isAuthenticated]);
 
   useEffect(() => {
@@ -83,6 +119,7 @@ export function MyGlobe() {
 
   return (
     <section
+      ref={sectionRef}
       id="globe-section"
       className="scroll-mt-24 bg-gradient-to-b from-background via-primary/[0.02] to-background px-4 py-24 sm:px-6 sm:py-32 lg:px-8"
     >
@@ -125,37 +162,91 @@ export function MyGlobe() {
           {isAuthenticated ? (
             <>
               <div className="relative -ml-[5%] w-[110%] sm:-ml-[8%] sm:w-[116%] lg:-ml-[12%] lg:w-[124%]">
-                <GlobeView
-                  places={places}
-                  onPlaceClick={(p) => setSelected(p)}
-                  onCountryClick={() => setShowChinaMap(true)}
-                  onGlobeDoubleClick={(lat, lng) => {
-                    setDialogLat(lat);
-                    setDialogLng(lng);
-                    setDialogOpen(true);
-                  }}
-                />
+                {globeVisible ? (
+                  <GlobeView
+                    places={places}
+                    onPlaceClick={(p) => setSelected(p)}
+                    onCountryClick={() => setShowChinaMap(true)}
+                    onGlobeDoubleClick={(lat, lng) => {
+                      setDialogLat(lat);
+                      setDialogLng(lng);
+                      setDialogOpen(true);
+                    }}
+                    onCanvasReady={(canvas) => setGlobeCanvas(canvas)}
+                  />
+                ) : (
+                  <div className="flex h-[600px] w-full items-center justify-center sm:h-[700px] lg:h-[800px]">
+                    <div className="flex flex-col items-center gap-3">
+                      <div className="flex size-14 items-center justify-center rounded-full border border-border/30 bg-muted/20">
+                        <Globe2 className="size-6 text-muted-foreground/30" />
+                      </div>
+                      <p className="text-xs text-muted-foreground/40">滚动到此处加载地球</p>
+                    </div>
+                  </div>
+                )}
 
-                {/* Add button */}
-                <button
-                  onClick={() => {
-                    setDialogLat(undefined);
-                    setDialogLng(undefined);
-                    setDialogOpen(true);
-                  }}
-                  className="absolute bottom-4 right-4 z-10 flex items-center gap-2 rounded-full bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground shadow-lg shadow-primary/30 transition-all hover:opacity-90 hover:shadow-xl hover:shadow-primary/40"
-                >
-                  <Plus className="size-4" />
-                  添加足迹
-                </button>
+                {/* Bottom-right buttons group */}
+                <div className="absolute bottom-4 right-4 z-10 flex flex-wrap gap-2">
+                  <button
+                    onClick={() => {
+                      setDialogLat(undefined);
+                      setDialogLng(undefined);
+                      setDialogOpen(true);
+                    }}
+                    className="flex items-center gap-1.5 rounded-full bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground shadow-lg shadow-primary/30 transition-all hover:opacity-90 hover:shadow-xl hover:shadow-primary/40"
+                  >
+                    <Plus className="size-4" />
+                    添加足迹
+                  </button>
+
+                  {globeCanvas && stats.cityCount > 0 && (
+                    <button
+                      onClick={() => setShowShare(true)}
+                      className="flex items-center gap-1.5 rounded-full border border-primary/20 bg-background/80 px-4 py-2.5 text-sm font-medium text-primary shadow-lg backdrop-blur-md transition-all hover:bg-background hover:shadow-xl"
+                    >
+                      <Share2 className="size-4" />
+                      分享
+                    </button>
+                  )}
+
+                  {stats.cityCount > 0 && (
+                    <button
+                      onClick={() => setShowTimeline(true)}
+                      className="flex items-center gap-1.5 rounded-full border border-emerald-400/20 bg-background/80 px-4 py-2.5 text-sm font-medium text-emerald-600 shadow-lg backdrop-blur-md transition-all hover:bg-background hover:shadow-xl dark:text-emerald-400"
+                    >
+                      <MessageCircle className="size-4" />
+                      日记
+                    </button>
+                  )}
+                </div>
 
                 {/* Place count */}
                 <div className="absolute left-4 top-4 z-10 flex items-center gap-1.5 rounded-full bg-background/60 px-3 py-1.5 text-xs text-muted-foreground backdrop-blur-md">
                   <MapPin className="size-3.5 text-primary/60" />
                   <span>
-                    已点亮 <strong className="text-foreground">{places.length}</strong> 个地方
+                    已点亮 <strong className="text-foreground">{stats.cityCount}</strong> 个地方
                   </span>
                 </div>
+
+                {/* Travel stats */}
+                {stats.cityCount > 0 && (
+                  <div className="absolute left-4 top-16 z-10 flex items-center gap-3 rounded-xl border border-primary/20 bg-gradient-to-r from-primary/15 to-primary/5 px-4 py-2.5 text-primary shadow-lg shadow-primary/10 backdrop-blur-md">
+                    <div className="flex flex-col items-center gap-0">
+                      <span className="text-sm font-bold leading-tight">{stats.cityCount}</span>
+                      <span className="text-[10px] leading-tight text-primary/60">城市</span>
+                    </div>
+                    <span className="text-[10px] text-primary/20">|</span>
+                    <div className="flex flex-col items-center gap-0">
+                      <span className="text-sm font-bold leading-tight">{stats.countryCount}</span>
+                      <span className="text-[10px] leading-tight text-primary/60">国家</span>
+                    </div>
+                    <span className="text-[10px] text-primary/20">|</span>
+                    <div className="flex flex-col items-center gap-0">
+                      <span className="text-sm font-bold leading-tight">{stats.totalKm.toLocaleString("zh-CN")}</span>
+                      <span className="text-[10px] leading-tight text-primary/60">km</span>
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Selected place detail */}
@@ -181,8 +272,22 @@ export function MyGlobe() {
               {/* China detail map */}
               <ChinaMapDetail
                 open={showChinaMap}
-                onClose={() => setShowChinaMap(false)}
+                onClose={() => { setShowChinaMap(false); fetchPlaces(); }}
                 places={places}
+              />
+
+              <SharePoster
+                open={showShare}
+                onClose={() => setShowShare(false)}
+                globeCanvas={globeCanvas}
+                cityCount={stats.cityCount}
+                countryCount={stats.countryCount}
+                totalKm={stats.totalKm}
+              />
+
+              <Timeline
+                open={showTimeline}
+                onClose={() => setShowTimeline(false)}
               />
             </>
           ) : (

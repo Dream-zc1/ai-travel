@@ -1,23 +1,36 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { Resend } from "resend";
 import { getDb } from "@/db";
 import { verificationCodes } from "@/db/schema";
 import { eq, and, gt } from "drizzle-orm";
+import { checkRateLimit } from "@/lib/rate-limit";
 
 const resend = process.env.RESEND_API_KEY
   ? new Resend(process.env.RESEND_API_KEY)
   : null;
 
-export async function POST(req: Request) {
+export async function POST(req: NextRequest) {
   try {
     const { email } = await req.json();
     if (!email) {
       return NextResponse.json({ error: "Email required" }, { status: 400 });
     }
 
+    // IP-based rate limit: max 5 send-code requests per 10 min per IP
+    const ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim()
+      || req.headers.get("x-real-ip")
+      || "unknown";
+    const ipLimit = checkRateLimit(`send-code:${ip}`, 5, 10 * 60 * 1000);
+    if (!ipLimit.allowed) {
+      return NextResponse.json(
+        { error: "请求过于频繁，请稍后再试" },
+        { status: 429 },
+      );
+    }
+
     const db = getDb();
 
-    // Rate limit: 60s cooldown
+    // Per-email rate limit: 60s cooldown
     const recent = await db
       .select()
       .from(verificationCodes)

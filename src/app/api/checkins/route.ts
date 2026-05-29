@@ -3,13 +3,15 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { getDb } from "@/db";
 import { placeCheckins, users } from "@/db/schema";
-import { eq, desc, sql } from "drizzle-orm";
+import { desc, sql } from "drizzle-orm";
 
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const lat = parseFloat(searchParams.get("lat") || "");
   const lng = parseFloat(searchParams.get("lng") || "");
   const radiusKm = parseFloat(searchParams.get("radius_km") || "1");
+  const offset = parseInt(searchParams.get("offset") || "0", 10);
+  const limit = parseInt(searchParams.get("limit") || "20", 10);
 
   if (isNaN(lat) || isNaN(lng)) {
     return NextResponse.json({ error: "lat and lng required" }, { status: 400 });
@@ -33,13 +35,14 @@ export async function GET(req: NextRequest) {
       userAvatar: users.avatar,
     })
     .from(placeCheckins)
-    .leftJoin(users, eq(placeCheckins.userId, String(users.id)))
+    .leftJoin(users, sql`${placeCheckins.userId} = CAST(${users.id} AS TEXT)`)
     .where(
       sql`${placeCheckins.lat} BETWEEN ${lat - latDelta} AND ${lat + latDelta}
           AND ${placeCheckins.lng} BETWEEN ${lng - lngDelta} AND ${lng + lngDelta}`,
     )
     .orderBy(desc(placeCheckins.createdAt))
-    .limit(50);
+    .limit(limit)
+    .offset(offset);
 
   return NextResponse.json(rows);
 }

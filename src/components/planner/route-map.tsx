@@ -1,17 +1,31 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useMemo } from "react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { Maximize2, Minimize2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-// Fix Leaflet default icon path (broken in bundled apps)
-L.Icon.Default.mergeOptions({
-  iconRetinaUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png",
-  iconUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png",
-  shadowUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
-});
+// Fix Leaflet default icon path with CDN fallback
+const CDN = "https://unpkg.com/leaflet@1.9.4/dist/images";
+const iconUrl = `${CDN}/marker-icon.png`;
+const img = new Image();
+img.onload = () => {
+  L.Icon.Default.mergeOptions({
+    iconRetinaUrl: `${CDN}/marker-icon-2x.png`,
+    iconUrl,
+    shadowUrl: `${CDN}/marker-shadow.png`,
+  });
+};
+img.onerror = () => {
+  // CDN failed — use built-in fallback
+  L.Icon.Default.mergeOptions({
+    iconRetinaUrl: "/images/marker-icon-2x.png",
+    iconUrl: "/images/marker-icon.png",
+    shadowUrl: "/images/marker-shadow.png",
+  });
+};
+img.src = iconUrl;
 
 interface RoutePoint {
   lat: number;
@@ -29,6 +43,9 @@ export function RouteMap({ route, title }: Props) {
   const [expanded, setExpanded] = useState(false);
   const mapRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<L.Map | null>(null);
+
+  // Stable key — only rebuild map when route data actually changes (deep compare)
+  const routeKey = useMemo(() => JSON.stringify(route), [route]);
 
   useEffect(() => {
     if (!mapRef.current || route.length === 0) return;
@@ -84,7 +101,7 @@ export function RouteMap({ route, title }: Props) {
       map.remove();
       mapInstanceRef.current = null;
     };
-  }, [route]);
+  }, [routeKey]);
 
   // Invalidate map size when expanded toggles
   useEffect(() => {

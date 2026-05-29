@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { X, MessageCircle, Send, Loader2, Plus, User } from "lucide-react";
 import { createPortal } from "react-dom";
+import { compressImage } from "@/lib/image-compress";
 
 interface Checkin {
   id: number;
@@ -24,9 +25,13 @@ interface CheckinListProps {
   placeName: string;
 }
 
+const PAGE_LIMIT = 20;
+
 export function CheckinList({ open, onClose, lat, lng, placeName }: CheckinListProps) {
   const [checkins, setCheckins] = useState<Checkin[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(true);
   const [comment, setComment] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -34,33 +39,63 @@ export function CheckinList({ open, onClose, lat, lng, placeName }: CheckinListP
   const [previewImage, setPreviewImage] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const sentinelRef = useRef<HTMLDivElement>(null);
 
-  const fetchCheckins = async () => {
-    setLoading(true);
+  const fetchCheckins = useCallback(async (offset = 0, append = false) => {
+    if (offset === 0) setLoading(true);
+    else setLoadingMore(true);
     try {
-      const res = await fetch(`/api/checkins?lat=${lat}&lng=${lng}&radius_km=1`);
-      if (res.ok) setCheckins(await res.json());
+      const res = await fetch(
+        `/api/checkins?lat=${lat}&lng=${lng}&radius_km=1&offset=${offset}&limit=${PAGE_LIMIT}`,
+      );
+      if (res.ok) {
+        const data = await res.json();
+        setCheckins((prev) => (append ? [...prev, ...data] : data));
+        if (data.length < PAGE_LIMIT) setHasMore(false);
+        else setHasMore(true);
+      }
     } catch {}
     setLoading(false);
-  };
+    setLoadingMore(false);
+  }, [lat, lng]);
 
+  // Reset on open
   useEffect(() => {
     if (open) {
+      setCheckins([]);
+      setHasMore(true);
       setComment("");
       setSelectedFile(null);
       setImagePreview(null);
-      fetchCheckins();
+      fetchCheckins(0);
       setTimeout(() => inputRef.current?.focus(), 300);
     }
-  }, [open]);
+  }, [open, fetchCheckins]);
 
-  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+  // IntersectionObserver for infinite scroll
+  useEffect(() => {
+    if (!open || loading || !hasMore) return;
+    const el = sentinelRef.current;
+    if (!el) return;
+    const obs = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting && hasMore && !loadingMore) {
+          fetchCheckins(checkins.length, true);
+        }
+      },
+      { rootMargin: "200px" },
+    );
+    obs.observe(el);
+    return () => obs.disconnect();
+  }, [open, loading, hasMore, loadingMore, checkins.length, fetchCheckins]);
+
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     if (!file.type.startsWith("image/")) return;
-    if (file.size > 2 * 1024 * 1024) return; // max 2MB for base64 storage
-    setSelectedFile(file);
-    setImagePreview(URL.createObjectURL(file));
+    const compressed = await compressImage(file);
+    setSelectedFile(compressed);
+    setImagePreview(URL.createObjectURL(compressed));
   };
 
   const handleRemoveImage = () => {
@@ -70,26 +105,21 @@ export function CheckinList({ open, onClose, lat, lng, placeName }: CheckinListP
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
-  const fileToBase64 = (file: File): Promise<string> => {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve(reader.result as string);
-      reader.onerror = reject;
-      reader.readAsDataURL(file);
-    });
+  const uploadPhoto = async (): Promise<string | null> => {
+    if (!selectedFile) return null;
+    const form = new FormData();
+    form.append("file", selectedFile);
+    const res = await fetch("/api/upload", { method: "POST", body: form });
+    if (!res.ok) return null;
+    const data = await res.json();
+    return data.url as string;
   };
 
   const handleSubmit = async () => {
     if (!comment.trim() && !selectedFile) return;
     setSubmitting(true);
 
-    // Convert image to base64 on client-side (works on any platform)
-    let imageUrl: string | null = null;
-    if (selectedFile) {
-      try {
-        imageUrl = await fileToBase64(selectedFile);
-      } catch {}
-    }
+    const imageUrl = await uploadPhoto();
 
     try {
       const res = await fetch("/api/checkins", {
@@ -106,7 +136,7 @@ export function CheckinList({ open, onClose, lat, lng, placeName }: CheckinListP
       if (res.ok) {
         setComment("");
         handleRemoveImage();
-        await fetchCheckins();
+        await fetchCheckins(0);
       }
     } catch {}
     setSubmitting(false);
@@ -224,6 +254,19 @@ export function CheckinList({ open, onClose, lat, lng, placeName }: CheckinListP
                       </div>
                     </div>
                   ))}
+
+                    {/* Sentinel for infinite scroll */}
+                    <div ref={sentinelRef} className="h-2" />
+                    {loadingMore && (
+                      <div className="flex justify-center py-2">
+                        <Loader2 className="size-5 animate-spin text-muted-foreground/50" />
+                      </div>
+                    )}
+                    {!hasMore && checkins.length > PAGE_LIMIT && (
+                      <p className="py-3 text-center text-xs text-muted-foreground/30">
+                        已显示全部打卡
+                      </p>
+                    )}
                 </div>
               )}
             </div>

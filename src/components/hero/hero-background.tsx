@@ -6,7 +6,7 @@ export function HeroBackground() {
         className="absolute inset-0 bg-cover bg-center dark:hidden"
         style={{
           backgroundImage:
-            'url("https://images.unsplash.com/photo-1520250497591-112f2f40a3f4?w=1920&q=85")',
+            'url("https://images.unsplash.com/photo-1520250497591-112f2f40a3f4?w=1600&q=80")',
         }}
       />
 
@@ -15,7 +15,7 @@ export function HeroBackground() {
         className="absolute inset-0 hidden bg-cover bg-center dark:block"
         style={{
           backgroundImage:
-            'url("https://images.unsplash.com/photo-1488085061387-422e29b40080?w=1920&q=85")',
+            'url("https://images.unsplash.com/photo-1488085061387-422e29b40080?w=1600&q=80")',
         }}
       />
 

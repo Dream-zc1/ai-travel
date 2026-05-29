@@ -5,21 +5,9 @@ import { Sparkles } from "lucide-react";
 import { PromptInput } from "./prompt-input";
 
 const fadeUp = (delay = 0) => ({
-  initial: { opacity: 0, y: 24 },
+  initial: { opacity: 0, y: 20 },
   animate: { opacity: 1, y: 0 },
-  transition: { delay, duration: 0.7, ease: [0.25, 0.1, 0, 1] as const },
-});
-
-const bounceIn = (delay = 0) => ({
-  initial: { opacity: 0, y: 40, scale: 0.92 },
-  animate: { opacity: 1, y: 0, scale: 1 },
-  transition: {
-    delay,
-    type: "spring" as const,
-    stiffness: 120,
-    damping: 10,
-    mass: 0.8,
-  },
+  transition: { delay, duration: 0.6, ease: [0.25, 0.1, 0, 1] as const },
 });
 
 export function HeroContent() {
@@ -27,7 +15,7 @@ export function HeroContent() {
     <div className="relative z-10 mx-auto flex w-full max-w-4xl flex-col items-center px-4 text-center">
       {/* Badge */}
       <motion.div
-        {...bounceIn(0.1)}
+        {...fadeUp(0.1)}
         className="mb-6 inline-flex items-center gap-1.5 rounded-full border border-primary/20 bg-primary/5 px-3.5 py-1 text-xs font-medium text-primary"
       >
         <Sparkles className="size-3.5" />
@@ -36,7 +24,7 @@ export function HeroContent() {
 
       {/* Headline */}
       <motion.h1
-        {...bounceIn(0.2)}
+        {...fadeUp(0.2)}
         className="text-balance text-5xl font-bold leading-[1.1] tracking-tight text-white dark:text-foreground sm:text-6xl md:text-7xl lg:text-8xl"
       >
         Your next adventure,

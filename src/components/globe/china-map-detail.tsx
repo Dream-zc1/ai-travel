@@ -9,34 +9,7 @@ import { chineseCities, type ChinaCity } from "@/data/chinese-cities";
 import { PlaceInfoCard } from "./place-info-card";
 import { CheckinList } from "./checkin-list";
 
-const MapContainer = dynamic(
-  () => import("react-leaflet").then((m) => m.MapContainer),
-  { ssr: false },
-);
-const TileLayer = dynamic(
-  () => import("react-leaflet").then((m) => m.TileLayer),
-  { ssr: false },
-);
-const GeoJSONComponent = dynamic(
-  () => import("react-leaflet").then((m) => m.GeoJSON),
-  { ssr: false },
-);
-const CircleMarker = dynamic(
-  () => import("react-leaflet").then((m) => m.CircleMarker),
-  { ssr: false },
-);
-const Popup = dynamic(
-  () => import("react-leaflet").then((m) => m.Popup),
-  { ssr: false },
-);
-const MapClickHandler = dynamic(
-  () => import("./map-click-handler").then((m) => m.MapClickHandler),
-  { ssr: false },
-);
-const CityMarkers = dynamic(
-  () => import("./city-markers").then((m) => m.CityMarkers),
-  { ssr: false },
-);
+const LeafletMap = dynamic(() => import("./leaflet-map").then((m) => m.LeafletMapInner), { ssr: false });
 
 interface Place {
   id: number;
@@ -66,6 +39,21 @@ const GEOJSON_URL =
 
 let cachedChinaFeature: any = null;
 let geoFetchPromise: Promise<void> | null = null;
+
+// Simple in-memory cache for geocode / Wikipedia lookups
+const cache = new Map<string, { data: any; expiry: number }>();
+function cacheGet<T>(key: string): T | undefined {
+  const entry = cache.get(key);
+  if (!entry) return undefined;
+  if (Date.now() > entry.expiry) { cache.delete(key); return undefined; }
+  return entry.data as T;
+}
+function cacheSet(key: string, data: any, ttlMs = 3600000) {
+  cache.set(key, { data, expiry: Date.now() + ttlMs });
+}
+function cacheKey(lat: number, lng: number) {
+  return `${lat.toFixed(3)},${lng.toFixed(3)}`;
+}
 
 function ensureGeoLoaded(): Promise<void> {
   if (cachedChinaFeature) return Promise.resolve();
@@ -119,51 +107,67 @@ export function ChinaMapDetail({ open, onClose, places }: ChinaMapDetailProps) {
     });
 
     const [wgsLat, wgsLng] = gcj02ToWgs84(gcjLat, gcjLng);
+    const ckey = cacheKey(wgsLat, wgsLng);
 
-    // Nominatim reverse geocode (fast)
+    // Nominatim reverse geocode with cache
     let name = `${gcjLat.toFixed(4)}, ${gcjLng.toFixed(4)}`;
     let address: string | undefined;
-    try {
-      const res = await fetch(
-        `https://nominatim.openstreetmap.org/reverse?format=json&lat=${wgsLat}&lon=${wgsLng}&zoom=18&accept-language=zh`,
-        { signal: abort.signal, headers: { "User-Agent": "AITravel/1.0" } },
-      );
-      if (res.ok && !abort.signal.aborted) {
-        const data = await res.json();
-        name = data.display_name?.split(",")[0] || name;
-        address = data.display_name || undefined;
-      }
-    } catch {}
+    const cachedNominatim = cacheGet<{ name: string; address?: string }>(`n:${ckey}`);
+    if (cachedNominatim) {
+      name = cachedNominatim.name;
+      address = cachedNominatim.address;
+    } else {
+      try {
+        const res = await fetch(
+          `https://nominatim.openstreetmap.org/reverse?format=json&lat=${wgsLat}&lon=${wgsLng}&zoom=18&accept-language=zh`,
+          { signal: abort.signal, headers: { "User-Agent": "AITravel/1.0" } },
+        );
+        if (res.ok && !abort.signal.aborted) {
+          const data = await res.json();
+          name = data.display_name?.split(",")[0] || name;
+          address = data.display_name || undefined;
+          cacheSet(`n:${ckey}`, { name, address });
+        }
+      } catch {} // Falls back to showing coords — graceful degradation
+    }
 
     if (abort.signal.aborted) return;
     setLoading(false);
     setPlaceInfo({ lat: gcjLat, lng: gcjLng, displayName: name, address });
 
-    // Lazy Wikipedia lookup (don't block)
-    try {
-      const geoRes = await fetch(
-        `https://zh.wikipedia.org/w/api.php?action=query&list=geosearch&gscoord=${wgsLat}|${wgsLng}&gsradius=200&gslimit=1&format=json&origin=*`,
-        { signal: abort.signal },
-      );
-      if (geoRes.ok && !abort.signal.aborted) {
-        const geoData = await geoRes.json();
-        const page = geoData.query?.geosearch?.[0];
-        if (page?.title) {
-          const sRes = await fetch(
-            `https://zh.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(page.title)}`,
-            { signal: abort.signal },
-          );
-          if (sRes.ok && !abort.signal.aborted) {
-            const sData = await sRes.json();
-            setPlaceInfo((prev) => prev ? {
-              ...prev,
-              wikipediaSummary: sData.extract,
-              wikipediaThumbnail: sData.thumbnail?.source,
-            } : null);
+    // Lazy Wikipedia lookup with cache
+    const cachedWiki = cacheGet<{ summary: string; thumbnail?: string }>(`w:${ckey}`);
+    if (cachedWiki) {
+      setPlaceInfo((prev) => prev ? { ...prev, wikipediaSummary: cachedWiki.summary, wikipediaThumbnail: cachedWiki.thumbnail } : null);
+    } else {
+      try {
+        const geoRes = await fetch(
+          `https://zh.wikipedia.org/w/api.php?action=query&list=geosearch&gscoord=${wgsLat}|${wgsLng}&gsradius=200&gslimit=1&format=json&origin=*`,
+          { signal: abort.signal },
+        );
+        if (geoRes.ok && !abort.signal.aborted) {
+          const geoData = await geoRes.json();
+          const page = geoData.query?.geosearch?.[0];
+          if (page?.title) {
+            const sRes = await fetch(
+              `https://zh.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(page.title)}`,
+              { signal: abort.signal },
+            );
+            if (sRes.ok && !abort.signal.aborted) {
+              const sData = await sRes.json();
+              const summary = sData.extract;
+              const thumbnail = sData.thumbnail?.source;
+              cacheSet(`w:${ckey}`, { summary, thumbnail });
+              setPlaceInfo((prev) => prev ? {
+                ...prev,
+                wikipediaSummary: summary,
+                wikipediaThumbnail: thumbnail,
+              } : null);
+            }
           }
         }
-      }
-    } catch {}
+      } catch {}
+    }
   }, []);
 
   // Instant city label click — no Nominatim needed, we already have the name
@@ -182,7 +186,14 @@ export function ChinaMapDetail({ open, onClose, places }: ChinaMapDetailProps) {
       displayName: city.name,
     });
 
-    // Background Wikipedia lookup
+    // Background Wikipedia lookup with cache
+    const ckey = cacheKey(city.lat, city.lng);
+    const cachedWiki = cacheGet<{ summary: string; thumbnail?: string }>(`w:${ckey}`);
+    if (cachedWiki) {
+      setPlaceInfo((prev) => prev ? { ...prev, wikipediaSummary: cachedWiki.summary, wikipediaThumbnail: cachedWiki.thumbnail } : null);
+      return;
+    }
+
     (async () => {
       try {
         const geoRes = await fetch(
@@ -199,10 +210,13 @@ export function ChinaMapDetail({ open, onClose, places }: ChinaMapDetailProps) {
             );
             if (sRes.ok && !abort.signal.aborted) {
               const sData = await sRes.json();
+              const summary = sData.extract;
+              const thumbnail = sData.thumbnail?.source;
+              cacheSet(`w:${ckey}`, { summary, thumbnail });
               setPlaceInfo((prev) => prev ? {
                 ...prev,
-                wikipediaSummary: sData.extract,
-                wikipediaThumbnail: sData.thumbnail?.source,
+                wikipediaSummary: summary,
+                wikipediaThumbnail: thumbnail,
               } : null);
             }
           }
@@ -251,65 +265,13 @@ export function ChinaMapDetail({ open, onClose, places }: ChinaMapDetailProps) {
                 <Loader2 className="size-8 animate-spin text-muted-foreground" />
               </div>
             ) : (
-              <MapContainer
+              <LeafletMap
                 key={mapKey}
-                center={[35, 105]}
-                zoom={4}
-                scrollWheelZoom={true}
-                className="h-full w-full"
-                zoomControl={false}
-              >
-                <TileLayer
-                  attribution="&copy; 高德地图"
-                  url="https://webrd01.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&x={x}&y={y}&z={z}"
-                />
-                <MapClickHandler onClick={handleMapClick} />
-                {cachedChinaFeature && (
-                  <GeoJSONComponent
-                    data={cachedChinaFeature}
-                    style={{
-                      color: "#FFD700",
-                      weight: 2.5,
-                      fillColor: "rgba(255, 215, 0, 0.08)",
-                      fillOpacity: 0.3,
-                    }}
-                  />
-                )}
-
-                {/* Clickable city labels — instant, no API call */}
-                <CityMarkers cities={chineseCities} onCityClick={handleCityClick} />
-
-                {/* Place markers */}
-                {chinaPlaces.map((p) => (
-                  <CircleMarker
-                    key={p.id}
-                    center={[p.lat, p.lng]}
-                    radius={8}
-                    pathOptions={{
-                      color: "#FFD700",
-                      fillColor: "#f97316",
-                      fillOpacity: 0.9,
-                      weight: 2,
-                    }}
-                  >
-                    <Popup>
-                      <div className="min-w-[150px]">
-                        <p className="mb-1 font-semibold">{p.name}</p>
-                        <p className="text-xs text-muted-foreground">
-                          {p.lat.toFixed(4)}, {p.lng.toFixed(4)}
-                        </p>
-                        {p.photo && (
-                          <img
-                            src={p.photo}
-                            alt={p.name}
-                            className="mt-2 w-full rounded-lg"
-                          />
-                        )}
-                      </div>
-                    </Popup>
-                  </CircleMarker>
-                ))}
-              </MapContainer>
+                chinaFeature={cachedChinaFeature}
+                places={chinaPlaces}
+                onMapClick={handleMapClick}
+                onCityClick={handleCityClick}
+              />
             )}
 
             {/* Place info card */}

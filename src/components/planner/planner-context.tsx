@@ -94,7 +94,6 @@ export function PlannerProvider({ children }: { children: ReactNode }) {
       setCurrentQuery(message.content);
     }
 
-    console.log("Prompt:", prompt);
     lastPromptRef.current = prompt;
     setGenerationStep(0);
     setIsLoading(true);

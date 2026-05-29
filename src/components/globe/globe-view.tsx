@@ -19,12 +19,13 @@ interface GlobeViewProps {
   onPlaceClick: (place: Place) => void;
   onCountryClick?: (country: { name: string; isoA3: string }) => void;
   onGlobeDoubleClick?: (lat: number, lng: number) => void;
+  onCanvasReady?: (canvas: HTMLCanvasElement) => void;
 }
 
 const GEOJSON_URL =
   "https://cdn.jsdelivr.net/npm/globe.gl/example/datasets/ne_110m_admin_0_countries.geojson";
 
-export function GlobeView({ places, onPlaceClick, onCountryClick, onGlobeDoubleClick }: GlobeViewProps) {
+export function GlobeView({ places, onPlaceClick, onCountryClick, onGlobeDoubleClick, onCanvasReady }: GlobeViewProps) {
   const globeEl = useRef<any>(null);
   const { resolvedTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
@@ -46,8 +47,11 @@ export function GlobeView({ places, onPlaceClick, onCountryClick, onGlobeDoubleC
       globeEl.current.controls().autoRotate = true;
       globeEl.current.controls().autoRotateSpeed = 0.8;
       globeEl.current.pointOfView({ lat: 20, lng: 105 }, 0);
+      // Expose canvas for share poster
+      const canvas = globeEl.current.renderer()?.domElement;
+      if (canvas) onCanvasReady?.(canvas);
     }
-  }, []);
+  }, [onCanvasReady]);
 
   // Double-click handler using Three.js raycasting
   const handleDoubleClick = useCallback(
@@ -92,16 +96,10 @@ export function GlobeView({ places, onPlaceClick, onCountryClick, onGlobeDoubleC
 
   // Attach dblclick listener after Globe mounts
   useEffect(() => {
-    if (!onGlobeDoubleClick) return;
-    const timer = setInterval(() => {
-      const globe = globeEl.current;
-      if (!globe?.renderer()?.domElement) return;
-      clearInterval(timer);
-      const canvas = globe.renderer().domElement;
-      canvas.addEventListener("dblclick", handleDoubleClick);
-      return () => canvas.removeEventListener("dblclick", handleDoubleClick);
-    }, 100);
-    return () => clearInterval(timer);
+    if (!onGlobeDoubleClick || !globeEl.current?.renderer()?.domElement) return;
+    const canvas = globeEl.current.renderer().domElement;
+    canvas.addEventListener("dblclick", handleDoubleClick);
+    return () => canvas.removeEventListener("dblclick", handleDoubleClick);
   }, [handleDoubleClick, onGlobeDoubleClick]);
 
   const isDark = mounted && resolvedTheme === "dark";
@@ -163,6 +161,14 @@ export function GlobeView({ places, onPlaceClick, onCountryClick, onGlobeDoubleC
         pointRadius={0.25}
         pointsMerge={false}
         onPointClick={(point: any) => onPlaceClick(point as Place)}
+        ringsData={pointsData}
+        ringLat="lat"
+        ringLng="lng"
+        ringAltitude={0.015}
+        ringColor={() => (isDark ? "#f97316" : "#2563eb")}
+        ringResolution={32}
+        ringPropagationSpeed={3}
+        ringRepeatPeriod={2000}
         labelText="name"
         labelLat="lat"
         labelLng="lng"

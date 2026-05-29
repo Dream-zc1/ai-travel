@@ -4,6 +4,7 @@ import { useState, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { X, Upload, MapPin, Loader2 } from "lucide-react";
 import { searchCities, type City } from "@/data/cities";
+import { compressImage } from "@/lib/image-compress";
 
 interface AddPlaceDialogProps {
   open: boolean;
@@ -18,6 +19,7 @@ export function AddPlaceDialog({ open, onClose, onAdd, initialLat, initialLng }:
   const [results, setResults] = useState<City[]>([]);
   const [selected, setSelected] = useState<City | null>(null);
   const [photo, setPhoto] = useState<string | null>(null);
+  const [photoFile, setPhotoFile] = useState<File | null>(null);
   const [loading, setLoading] = useState(false);
   const [customName, setCustomName] = useState("");
   const fileRef = useRef<HTMLInputElement>(null);
@@ -30,7 +32,9 @@ export function AddPlaceDialog({ open, onClose, onAdd, initialLat, initialLng }:
     setQuery("");
     setResults([]);
     setSelected(null);
+    if (photo) URL.revokeObjectURL(photo);
     setPhoto(null);
+    setPhotoFile(null);
     setCustomName("");
     setLoading(false);
   }, [open]);
@@ -46,23 +50,36 @@ export function AddPlaceDialog({ open, onClose, onAdd, initialLat, initialLng }:
     setResults([]);
   };
 
-  const handlePhoto = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handlePhoto = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = () => setPhoto(reader.result as string);
-    reader.readAsDataURL(file);
+    const compressed = await compressImage(file);
+    setPhotoFile(compressed);
+    setPhoto(URL.createObjectURL(compressed));
+  };
+
+  const uploadPhoto = async (): Promise<string | null> => {
+    if (!photoFile) return null;
+    const form = new FormData();
+    form.append("file", photoFile);
+    const res = await fetch("/api/upload", { method: "POST", body: form });
+    if (!res.ok) return null;
+    const data = await res.json();
+    return data.url as string;
   };
 
   const handleSubmit = async () => {
     if (isDirectMode) {
       if (!customName.trim()) return;
-      setLoading(true);
-      await onAdd(customName.trim(), initialLat!, initialLng!, photo);
     } else {
       if (!selected) return;
-      setLoading(true);
-      await onAdd(selected.name, selected.lat, selected.lng, photo);
+    }
+    setLoading(true);
+    const url = await uploadPhoto();
+    if (isDirectMode) {
+      await onAdd(customName.trim(), initialLat!, initialLng!, url);
+    } else {
+      await onAdd(selected!.name, selected!.lat, selected!.lng, url);
     }
     setLoading(false);
     onClose();

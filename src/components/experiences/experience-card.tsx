@@ -12,11 +12,8 @@ interface ExperienceCardProps {
 export function ExperienceCard({ experience }: ExperienceCardProps) {
   return (
     <motion.div
-      variants={{
-        hidden: { opacity: 0, y: 24 },
-        visible: { opacity: 1, y: 0 },
-      }}
-      className="group relative aspect-[3/2] w-[85vw] shrink-0 overflow-hidden rounded-3xl sm:w-[75vw] md:w-[65vw] lg:w-[58vw] xl:w-[50vw]"
+      layout
+      className="group relative aspect-[3/2] w-full shrink-0 overflow-hidden rounded-3xl"
     >
       {/* Photo */}
       <div className="absolute inset-0">
@@ -25,7 +22,8 @@ export function ExperienceCard({ experience }: ExperienceCardProps) {
           alt={experience.destination}
           fill
           className="object-cover transition-all duration-700 group-hover:scale-105"
-          sizes="(max-width: 640px) 85vw, (max-width: 768px) 75vw, (max-width: 1024px) 65vw, 50vw"
+          sizes="(max-width: 768px) 100vw, 50vw"
+          loading="lazy"
         />
       </div>
 
